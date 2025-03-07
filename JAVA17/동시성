@@ -1,0 +1,131 @@
+# 동시성 in Java17
+
+자바에서 동시성(concurrency)은 여러 작업을 동시에 수행하여 프로그램의 성능과 응답성을 높이는 데 중요한 역할을 합니다. 특히 **스레드(Thread)**와 **Future**를 이해하는 것이 핵심입니다.
+
+### 1. 스레드(Thread)
+
+스레드는 프로세스 내에서 동시에 실행되는 작업의 최소 단위입니다.
+
+스레드는 마치 한 명의 요리사가 여러 요리를 동시에 준비하는 과정과 같습니다. 하나의 요리를 조리하다가 기다리는 동안 다른 요리를 시작하여, 전체 준비 시간을 단축합니다.
+
+```mermaid
+sequenceDiagram
+    participant Client1
+    participant Client2
+    participant WebServer
+
+    Client1->>WebServer: 요청 1
+    Client2->>WebServer: 요청 2
+
+    par
+        WebServer-->>Client1: 응답 1
+        WebServer-->>Client2: 응답 2
+    end
+
+```
+
+### 클래스 및 메서드 설명
+
+- `Runnable` 인터페이스: `run()` 메서드를 구현하여 스레드가 수행할 작업 정의
+- `Thread` 클래스: 스레드를 생성하고 관리
+    - `start()`: 새로운 스레드를 시작
+    - `join()`: 다른 스레드의 종료를 기다림
+    - `sleep(long millis)`: 지정된 시간 동안 스레드를 멈춤
+
+```java
+public class Task implements Runnable {
+    private final int taskId;
+
+    public Task(int taskId) {
+        this.taskId = taskId;
+    }
+
+    @Override
+    public void run() {
+        System.out.println("Task " + taskId + " 시작");
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        System.out.println("Task " + taskId + " 종료");
+    }
+
+    public static void main(String[] args) throws InterruptedException {
+        Thread[] threads = new Thread[5];
+        for (int i = 0; i < 5; i++) {
+            threads[i] = new Thread(new Task(i));
+            threads[i].start();
+        }
+
+        for (Thread thread : threads) {
+            thread.join();  // 모든 스레드가 끝나기를 기다림
+        }
+
+        System.out.println("메인 스레드 종료");
+    }
+}
+```
+
+### 2. Future와 비동기 처리
+
+Future는 비동기 작업의 결과를 나타내는 객체로, 결과가 즉시 제공되지 않을 때 활용됩니다.
+
+Future는 온라인 쇼핑에서 상품을 주문한 후 받는 주문 확인서와 같습니다. 주문 확인서는 실제 상품이 도착할 때까지 기다리게 해주고, 상품이 도착하면 주문 확인서를 통해 상품을 수령합니다.
+
+```mermaid
+sequenceDiagram
+    participant MainThread
+    participant Database
+
+    MainThread->>Database: 비동기 쿼리 요청
+    MainThread->>MainThread: 다른 작업 수행
+    Database-->>MainThread: 쿼리 결과 반환
+```
+
+### 클래스 및 메서드 설명
+
+- `Future<V>` 인터페이스:
+    - `get()`: 비동기 작업이 완료될 때까지 기다린 후 결과를 반환
+    - `isDone()`: 작업 완료 여부 확인
+- `CompletableFuture<V>` 클래스:
+    - `supplyAsync(Supplier<V>)`: 비동기 작업 시작
+
+```java
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+
+public class AsyncExample {
+    public static void main(String[] args) {
+        CompletableFuture<String> future = CompletableFuture.supplyAsync(() -> {
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return "비동기 작업 완료";
+        });
+
+        System.out.println("메인 스레드 진행 중...");
+
+        try {
+            String result = future.get(); // 결과가 준비될 때까지 기다림
+            System.out.println(result);
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+### 3. 분산 환경에서의 동시성 제어
+
+분산 환경에서는 여러 프로세스나 서비스가 동시에 공유 자원에 접근하므로 동시성 제어가 필수입니다. Redis와 Kafka는 이런 환경에서 자주 사용되는 대표적인 기술입니다.
+
+### Redis를 이용한 동시성 제어
+
+Redis는 빠른 속도의 키-값 저장소로, 주로 캐시나 분산 락(distributed lock) 구현에 사용됩니다. 여러 서비스가 동일한 자원을 접근할 때 Redis의 분산 락을 활용하여 자원의 일관성과 무결성을 유지합니다.
+
+### Kafka를 이용한 비동기 메시징
+
+Kafka는 메시지 브로커로, 서비스 간 비동기 통신을 가능하게 합니다. 생산자(Producer)가 메시지를 Kafka로 보내면, 소비자(Consumer)는 원하는 타이밍에 메시지를 받아 처리할 수 있어 시스템 간 결합도를 낮추고 부하를 분산시킵니다.
